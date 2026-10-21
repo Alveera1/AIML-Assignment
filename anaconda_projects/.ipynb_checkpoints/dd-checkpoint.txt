@@ -1,0 +1,557 @@
+# Apply PCA to Remove Multicollinearity and Compare Regression Models
+
+I'll explain this in an exam and practical-friendly way, with complete Python code, theory, output interpretation, and viva points.
+
+## 1. What is the assignment asking?
+
+Assignment: Apply Principal Component Analysis (PCA) to reduce multicollinearity and compare a regression model trained before and after the transformation.
+
+You need to perform these steps:
+
+1. Load a regression dataset.
+2. Train a Linear Regression model using the original features.
+3. Check multicollinearity between the features.
+4. Apply PCA to transform the original features into principal components.
+5. Train another Linear Regression model using those components.
+6. Compare both models using MAE, MSE, RMSE and \\(R^2\\).
+
+## 2. Understand the concepts first
+
+### What is multicollinearity?
+
+Multicollinearity occurs when two or more independent variables are highly correlated with one another.
+
+For example, suppose you want to predict a house's price using:
+
+- Area in square feet
+- Area in square metres
+- Number of rooms
+- Number of bedrooms
+
+Area in square feet and area in square metres contain essentially the same information. This redundancy can make regression coefficients unstable and difficult to interpret.
+
+### What is PCA?
+
+PCA stands for Principal Component Analysis. It transforms correlated original features into new features called principal components.
+
+Original features
+
+X₁, X₂, X₃, X₄ — potentially correlated
+
+Standardization + PCA
+
+Principal components
+
+PC₁, PC₂ — uncorrelated linear combinations
+
+Linear Regression
+
+Predict the target variable using the components
+
+PCA creates components that are mutually uncorrelated in the training data. This can reduce multicollinearity, especially when you retain fewer components.
+
+Important: PCA does not guarantee better prediction accuracy. It may improve stability, but removing components can also remove useful information.
+
+## 3. Complete Python code
+
+We'll use the built-in Diabetes dataset from Scikit-learn. It is a regression dataset, so we can predict a continuous numerical target without downloading any external dataset.
+
+```
+# Apply PCA to reduce multicollinearity
+# and compare regression models before and after PCA
+
+import numpy as np
+import pandas as pd
+
+from sklearn.datasets import load_diabetes
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import (
+    mean_absolute_error,
+    mean_squared_error,
+    r2_score
+)
+
+# 1. Load the dataset
+data = load_diabetes()
+
+X = pd.DataFrame(data.data, columns=data.feature_names)
+y = data.target
+
+print("Dataset shape:", X.shape)
+print(X.head())
+
+# 2. Split the dataset
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42
+)
+
+# 3. Standardize the features
+scaler = StandardScaler()
+
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
+# 4. Train regression BEFORE PCA
+model_before = LinearRegression()
+model_before.fit(X_train_scaled, y_train)
+
+y_pred_before = model_before.predict(X_test_scaled)
+
+# 5. Apply PCA
+pca = PCA(n_components=0.95)
+
+X_train_pca = pca.fit_transform(X_train_scaled)
+X_test_pca = pca.transform(X_test_scaled)
+
+print("\nOriginal number of features:", X.shape[1])
+print("Components retained:", pca.n_components_)
+print("Explained variance:",
+      round(sum(pca.explained_variance_ratio_), 4))
+
+# 6. Train regression AFTER PCA
+model_after = LinearRegression()
+model_after.fit(X_train_pca, y_train)
+
+y_pred_after = model_after.predict(X_test_pca)
+
+# 7. Define evaluation function
+def evaluate_model(y_true, y_pred):
+    mae = mean_absolute_error(y_true, y_pred)
+    mse = mean_squared_error(y_true, y_pred)
+    rmse = np.sqrt(mse)
+    r2 = r2_score(y_true, y_pred)
+
+    return [mae, mse, rmse, r2]
+
+# 8. Compare both models
+results = pd.DataFrame(
+    [
+        evaluate_model(y_test, y_pred_before),
+        evaluate_model(y_test, y_pred_after)
+    ],
+    columns=["MAE", "MSE", "RMSE", "R2"],
+    index=["Before PCA", "After PCA"]
+)
+
+print("\nModel Comparison:")
+print(results.round(3))
+
+# 9. Check correlation between PCA components
+component_df = pd.DataFrame(
+    X_train_pca,
+    columns=[f"PC{i+1}" for i in range(pca.n_components_)]
+)
+
+print("\nCorrelation between PCA components:")
+print(component_df.corr().round(3))
+
+# 10. Plot actual vs predicted values
+import matplotlib.pyplot as plt
+
+plt.figure(figsize=(7, 5))
+
+plt.scatter(y_test, y_pred_before, label="Before PCA")
+plt.scatter(y_test, y_pred_after, label="After PCA")
+
+plt.xlabel("Actual Values")
+plt.ylabel("Predicted Values")
+plt.title("Regression Before vs After PCA")
+plt.legend()
+plt.show()
+```
+
+## 4. Explanation of the code, step by step
+
+### Step 1: Load the dataset
+
+```
+data = load_diabetes()X = pd.DataFrame(data.data, columns=data.feature_names)y = data.target
+```
+
+- `X` contains the independent variables or input features.
+- `y` contains the target values we want to predict.
+- `load_diabetes()` loads a ready-made regression dataset.
+
+### Step 2: Split the data
+
+```
+train_test_split(X, y, test_size=0.2, random_state=42)
+```
+
+- 80% of the data is used for training.
+- 20% is used for testing.
+- `random_state=42` makes the split reproducible.
+
+We must split before applying PCA to avoid data leakage.
+
+### Step 3: Standardize the features
+
+```
+scaler = StandardScaler()X_train_scaled = scaler.fit_transform(X_train)X_test_scaled = scaler.transform(X_test)
+```
+
+Standardization converts the features to approximately zero mean and unit variance.
+
+Why do we use it? PCA is sensitive to feature scales. Without standardization, features with larger numerical scales may dominate the components.
+
+Remember:
+
+- `fit_transform()` learns the scaling parameters and transforms the training data.
+- `transform()` applies the already-learned parameters to test data.
+
+### Step 4: Train the model before PCA
+
+```
+model_before = LinearRegression()model_before.fit(X_train_scaled, y_train)y_pred_before = model_before.predict(X_test_scaled)
+```
+
+Here, Linear Regression learns the relationship between the original features and the target.
+
+These predictions provide our baseline for comparison.
+
+### Step 5: Apply PCA
+
+```
+pca = PCA(n_components=0.95)X_train_pca = pca.fit_transform(X_train_scaled)X_test_pca = pca.transform(X_test_scaled)
+```
+
+The important line is:
+
+```
+PCA(n_components=0.95)
+```
+
+It retains enough principal components to explain at least 95% of the variance in the training features.
+
+For example, if PCA retains 7 components from 10 original features, the data has been reduced from 10 dimensions to 7 while preserving at least 95% of the training-feature variance.
+
+The exact number of components depends on the dataset.
+
+### Step 6: Train the model after PCA
+
+```
+model_after = LinearRegression()model_after.fit(X_train_pca, y_train)y_pred_after = model_after.predict(X_test_pca)
+```
+
+Now regression uses the principal components instead of the original features.
+
+Because PCA components are orthogonal, they are uncorrelated with each other in the training data. This helps address multicollinearity.
+
+### Step 7: Evaluate and compare the models
+
+| Metric    | Meaning                                               | Better result    |
+| --------- | ----------------------------------------------------- | ---------------- |
+| MAE       | Average absolute prediction error                     | Lower            |
+| MSE       | Average squared prediction error                      | Lower            |
+| RMSE      | Square root of MSE; error in target units             | Lower            |
+| \\(R^2\\) | Proportion of target variation explained by the model | Generally higher |
+
+Your program prints the actual values for both models. Do not assume that the PCA model will necessarily score better.
+
+### Step 8: Check the PCA components
+
+```
+component_df.corr()
+```
+
+This prints the correlation matrix of the retained principal components. Off-diagonal values should be approximately zero, allowing for rounding.
+
+The final scatter plot compares actual target values with predictions from both models. Predictions closer to the ideal diagonal line indicate better agreement.
+
+## 5. How to interpret your output
+
+Your comparison table will look like this in structure; the numbers will be produced when you run the code.
+
+| Model      | MAE      | MSE      | RMSE     | R²       |
+| ---------- | -------- | -------- | -------- | -------- |
+| Before PCA | Computed | Computed | Computed | Computed |
+| After PCA  | Computed | Computed | Computed | Computed |
+
+Use these rules to explain the results:
+
+- If the PCA model has lower MAE, MSE and RMSE, it has smaller prediction errors.
+- If the PCA model has a higher \\(R^2\\), it explains more of the target variation on the test set.
+- If the original model performs better, PCA may have discarded components containing useful predictive information.
+
+## 6. Conclusion for your practical file
+
+Principal Component Analysis (PCA) was applied to transform the original features into uncorrelated principal components. Linear Regression models were trained before and after PCA, and their performance was compared using MAE, MSE, RMSE and R². The results demonstrate how PCA can reduce multicollinearity and dimensionality, although its effect on prediction accuracy depends on the information retained.
+
+## 7. Viva questions
+
+Q1. Why is PCA used?
+
+PCA reduces dimensionality by transforming correlated features into a smaller set of uncorrelated principal components.
+
+Q2. Does PCA always improve regression accuracy?
+
+No. It can reduce multicollinearity, but discarded components may contain useful predictive information.
+
+Q3. Why is standardization required before PCA?
+
+To prevent features with larger scales from dominating the principal components.
+
+Q4. What does `n_components=0.95` mean?
+
+Retain the minimum number of principal components needed to explain at least 95% of the variance in the training features.
+
+Q5. Does PCA select the most important original features?
+
+No. PCA creates new features as linear combinations of the original features.
+
+Q6. How do we know multicollinearity has been reduced?
+
+The retained PCA components are mutually uncorrelated. However, this does not mean that all possible regression problems are solved or that the model's predictions will improve.
+
+
+
+# Apply PCA to Remove Multicollinearity and Compare Regression Models
+
+Let's understand the complete problem statement in very easy language, as if you're preparing for your Machine Learning practical and viva.
+
+## 1. What does the problem statement mean?
+
+The statement is:
+
+"Apply PCA to remove multicollinearity and compare a regression model trained before and after the transformation."
+
+It asks you to do two main things:
+
+1. Use PCA to handle multicollinearity in the input features.
+2. Train a regression model before and after PCA and compare their performance.
+
+Let's understand every term.
+
+## 2. Understand each concept
+
+### A. What is regression?
+
+Regression is a type of supervised machine learning used to predict a continuous numerical value.
+
+Examples:
+
+- Predicting house prices.
+- Predicting a person's salary.
+- Predicting temperature.
+- Predicting medical measurements.
+
+For example, if we have the area and number of rooms of a house, we can train a regression model to predict its price.
+
+### B. What are features and target variables?
+
+Suppose our dataset contains the following information:
+
+| Area (sq. ft.) | Number of rooms | Price (₹ lakh) |
+| -------------- | --------------- | -------------- |
+| 1,000          | 2               | 30             |
+| 1,500          | 3               | 45             |
+| 2,000          | 4               | 60             |
+| 2,500          | 5               | 75             |
+
+- Features (X): Area and number of rooms.
+- Target (y): House price.
+
+The model learns how the features relate to the target and uses them to predict prices for new houses.
+
+### C. What is multicollinearity?
+
+Multicollinearity occurs when two or more independent variables are highly correlated with each other.
+
+For example, consider these features:
+
+- Area in square feet.
+- Area in square metres.
+
+Both represent the same information. If one increases, the other also increases in a fixed proportion.
+
+This is a case of perfect multicollinearity.
+
+Why is this a problem? In Linear Regression, multicollinearity can make the estimated coefficients unstable, making it difficult to determine the individual effect of each feature.
+
+Remember: Multicollinearity is a relationship between input features, not between the input and target.
+
+### D. What is PCA?
+
+PCA stands for Principal Component Analysis.
+
+It is a dimensionality-reduction technique that transforms the original features into new features called principal components.
+
+For example:
+
+Original dataset
+
+Area, rooms, bedrooms, bathrooms
+
+PCA transformation
+
+Principal components
+
+PC1, PC2, PC3 ...
+
+PCA combines information from the original features into new components. These components are mutually uncorrelated.
+
+If you retain fewer components than the original number of features, PCA also reduces dimensionality.
+
+Important: PCA does not simply delete correlated columns. It creates new columns from combinations of the original ones.
+
+### E. What does "before and after transformation" mean?
+
+You need to train two separate regression models.
+
+### Model 1: Before PCA
+
+Original features
+
+Linear Regression
+
+Predictions using the original features
+
+### Model 2: After PCA
+
+Original features → PCA → Principal components
+
+Linear Regression
+
+Predictions using the principal components
+
+You then compare the predictions of these two models on the same test data.
+
+## 3. What is the purpose of comparing the models?
+
+The purpose is to find out whether PCA helps us reduce multicollinearity while maintaining acceptable prediction performance.
+
+We compare the models using these metrics:
+
+| Metric   | Meaning                                      | Best value       |
+| -------- | -------------------------------------------- | ---------------- |
+| MSE      | Mean Squared Error                           | Lower            |
+| RMSE     | Root Mean Squared Error                      | Lower            |
+| MAE      | Mean Absolute Error                          | Lower            |
+| R² score | How much target variation the model explains | Generally higher |
+
+For example, imagine the following hypothetical results:
+
+| Metric | Before PCA | After PCA |
+| ------ | ---------- | --------- |
+| MSE    | 100        | 120       |
+| RMSE   | 10         | 10.95     |
+| R²     | 0.80       | 0.76      |
+
+In this example, the model before PCA performs better at prediction because it has lower errors and a higher R² score.
+
+That does not mean PCA failed. PCA can reduce multicollinearity, but it may discard some information that is useful for predicting the target.
+
+These numbers are only an illustration, not the actual output of your code.
+
+## 4. What is happening in the code?
+
+Here are the most important lines to understand for your practical.
+
+Step 1: Load the dataset
+
+```
+data = load_diabetes()X = data.datay = data.target
+```
+
+`X` contains the input features, and `y` contains the numerical target.
+
+Step 2: Split the dataset
+
+```
+X_train, X_test, y_train, y_test = train_test_split(    X, y, test_size=0.2, random_state=42)
+```
+
+We use 80% of the data to train the models and 20% to test them.
+
+Step 3: Standardize the features
+
+```
+scaler = StandardScaler()X_train_scaled = scaler.fit_transform(X_train)X_test_scaled = scaler.transform(X_test)
+```
+
+Standardization puts features on comparable scales. This is important because PCA is affected by feature scale.
+
+Step 4: Train Linear Regression before PCA
+
+```
+model1 = LinearRegression()model1.fit(X_train_scaled, y_train)pred1 = model1.predict(X_test_scaled)
+```
+
+The first model learns from the original features.
+
+Step 5: Apply PCA
+
+```
+pca = PCA(n_components=0.95)X_train_pca = pca.fit_transform(X_train_scaled)X_test_pca = pca.transform(X_test_scaled)
+```
+
+The value `0.95` means we retain enough principal components to explain at least 95% of the variance in the training features.
+
+For example, if the original dataset has 10 features and PCA retains 7 components, the transformed dataset has 7 columns instead of 10.
+
+Step 6: Train Linear Regression after PCA
+
+```
+model2 = LinearRegression()model2.fit(X_train_pca, y_train)pred2 = model2.predict(X_test_pca)
+```
+
+The second model learns from the transformed features.
+
+Step 7: Compare both models
+
+```
+mean_squared_error(y_test, pred1)r2_score(y_test, pred1)
+```
+
+These functions measure the first model's performance. You apply the same metrics to `pred2` to evaluate the second model.
+
+## 5. What should you say to the external examiner?
+
+You can explain it like this:
+
+"Sir/Ma'am, the aim of this experiment is to study the effect of PCA on multicollinearity in a regression model. First, I load and split a regression dataset. Then I standardize the features and train a Linear Regression model using the original features. Next, I apply PCA to transform the features into mutually uncorrelated principal components and train another Linear Regression model. Finally, I compare both models using MSE, RMSE and R² score to understand how PCA affects prediction performance."
+
+## 6. Important viva questions
+
+1\. Why do we use PCA?
+
+To reduce dimensionality and transform correlated features into mutually uncorrelated principal components.
+
+2\. Does PCA always improve accuracy?
+
+No. It may remove useful information, so prediction accuracy can increase or decrease.
+
+3\. Why do we standardize before PCA?
+
+To prevent features with larger scales from dominating the transformation.
+
+4\. What is a principal component?
+
+A principal component is a linear combination of the original input features.
+
+5\. What is the difference between PCA and feature selection?
+
+Feature selection chooses a subset of existing features. PCA creates new features from combinations of the original features.
+
+6\. Why do we use Linear Regression here?
+
+Because the target variable is continuous and the assignment asks us to compare a regression model before and after PCA.
+
+7\. What does `fit_transform()` do in PCA?
+
+It learns the PCA transformation from the training data and applies that transformation to the data.
+
+8\. Why must we not fit PCA on the test data?
+
+Because that would allow information from the test set to influence the transformation. We fit PCA on training data and use the same transformation on the test data.
+
+9\. Does PCA remove multicollinearity completely?
+
+The retained principal components are mutually uncorrelated, so PCA removes linear correlation between those components. However, retaining fewer components can discard useful information.
+
+10\. What is the final conclusion?
+
+PCA transforms correlated input features into uncorrelated principal components and can reduce dimensionality. Comparing regression performance before and after PCA helps determine whether the transformation is beneficial for the particular dataset.
